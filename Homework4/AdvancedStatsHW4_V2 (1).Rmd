@@ -1,0 +1,159 @@
+---
+title: "Homework4"
+author: "Amit Gangane, Karishma Mehta, Shivani Tayade,  Sravya Bhaskara,  Varun Rao"
+date: "2025-02-06"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+```{r}
+# Load necessary libraries
+library(olsrr)
+
+# Read Data
+data <- read.csv("~/Downloads/MMM_data.csv")
+```
+
+```{r}
+# Extract relevant columns
+sales <- data[2:130, 2]  # Dependent Variable (Untransformed)
+lag.sales <- data[1:129, 2]  # Lagged Sales (Untransformed)
+direct.mail <- data[2:130, 3]  
+emails <- data[2:130, 4]  
+phone.calls <- data[2:130, 5]  
+online <- data[2:130, 6]  
+promo <- data[2:130, 7]
+holiday <- data[2:130, 8]
+```
+
+```{r}
+# Square-root transformation of marketing spend variables
+out.lm_sqrt <- lm(sales ~ lag.sales + sqrt(direct.mail) + sqrt(emails) + sqrt(phone.calls) + sqrt(online) + promo)
+
+# Display model summary
+summary(out.lm_sqrt)
+
+out.lm <- lm(log(sales) ~ log(lag.sales) + log(direct.mail) + log(emails) + log(1 + phone.calls) + log(online) + promo)
+summary(out.lm)
+
+```
+
+```{r}
+# Interaction effect with holidays
+hh <- data[2:130, 8]
+online.hh_sqrt <- sqrt(online) * hh
+out.interaction_sqrt <- lm(sales ~ lag.sales + sqrt(direct.mail) + sqrt(emails) + sqrt(phone.calls) + sqrt(online) + promo 
+                           + hh + online.hh_sqrt)
+summary(out.interaction_sqrt)
+```
+
+```{r}
+
+### since non-constant elasticity using mean values of X & Y
+mean_direct_mail <- (mean(direct.mail))
+mean_emails <- (mean(emails))
+mean_phone.calls <- (mean(phone.calls))
+mean_online <- (mean(online))
+
+mean_sales <- mean(sales)
+
+coeffs <- summary(out.interaction_sqrt)$coefficients
+
+
+elasticity_direct_mail <-  (coeffs[3,1] / (2*sqrt(mean_direct_mail))) *(mean_direct_mail/mean_sales)
+elasticity_emails <-  (coeffs[4,1] / (2*sqrt(mean_emails))) *(mean_emails/mean_sales)
+elasticity_phone.calls <- (coeffs[5,1] / (2*sqrt(mean_phone.calls))) *(mean_phone.calls/mean_sales)
+elasticity_online_hh_no <- (coeffs[6,1] / (2*sqrt(mean_online))) *(mean_online/mean_sales)
+elasticity_online_hh_yes <- ((coeffs[6,1] + coeffs[9,1]) / (2*sqrt(mean_online))) *(mean_online/mean_sales)
+
+
+
+elasticity_df <- data.frame("Marketing Area" = c("Direct Mail","Emails","Phone Calls","Online (Without Holidays)", "Online (With Holiday)"),
+           "Elasticity_Value_at_mean" = c(elasticity_direct_mail,elasticity_emails,elasticity_phone.calls,elasticity_online_hh_no,elasticity_online_hh_yes)
+)
+elasticity_df
+```
+
+```{r}
+
+# Compute variance inflation factor (VIF) for multicollinearity check
+ols_vif_tol(out.lm_sqrt)
+
+# Budget Allocation Strategy
+# Allocate budget based on the highest elasticities first
+budget_allocation <- elasticity_df[order(-elasticity_df$Elasticity_Value_at_mean), ]
+
+# Print budget allocation recommendation
+print(budget_allocation)
+```
+
+
+
+```{r}
+
+# Define spend-based marketing channels (excluding promotion & holiday)
+spend_columns <- c("direct_mail", "emails", "phone_calls", "online_budget")
+
+# Ensure selected columns exist in the dataset
+spend_columns <- spend_columns[spend_columns %in% colnames(data)]
+
+# Sum total spend per channel
+historical_spend <- colSums(data[, spend_columns], na.rm = TRUE)
+
+print("Total Spend per Channel:")
+print(historical_spend)
+
+
+```
+
+```{r}
+
+elasticities <- c(
+  "direct_mail" = -0.006448909,  # Not significant
+  "emails" = 0.029845335,        # Not significant
+  "phone_calls" = 0.043908654,   # Significant
+  "online_budget" = 0.406842555  # Highly significant
+)
+
+# Compute Incremental Revenue = Elasticity × Total Sales
+total_sales <- sum(data$sales, na.rm = TRUE)
+
+# Compute incremental revenue contribution for each channel
+incremental_revenue <- elasticities * total_sales
+
+# Print results
+print("Incremental Revenue per Channel:")
+print(incremental_revenue)
+
+```
+
+```{r}
+# Compute ROI per channel (avoid division by zero)
+historical_roi <- ifelse(historical_spend > 0, incremental_revenue / historical_spend, NA)
+
+print("ROI per Channel:")
+print(historical_roi)
+# Set ROI target dynamically based on past performance
+roi_target <- median(historical_roi, na.rm = TRUE)
+
+print(paste("Derived ROI Target:", round(roi_target, 2)))
+
+```
+```{r}
+# Compute optimal spend based on elasticity and ROI target
+optimal_spend <- (mean(data$sales, na.rm = TRUE) * elasticities) / roi_target
+
+# Remove negative values
+optimal_spend[optimal_spend < 0] <- 0
+
+# Compute total budget
+total_budget <- sum(optimal_spend, na.rm = TRUE)
+
+# Print final budget
+print(paste("Total Optimal Budget:", round(total_budget, 2)))
+```

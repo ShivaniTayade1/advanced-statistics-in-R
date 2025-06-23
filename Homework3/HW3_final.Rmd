@@ -1,0 +1,238 @@
+---
+title: "Homework03"
+author: "Amit Gangane, Varun Rao,  Shivani Tayade,  Sravya Bhaskara,  Karishma Mehta"
+date: "2025-01-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+if (!require(glmnet)) install.packages("glmnet", dependencies = TRUE)
+library(glmnet)
+```
+
+```{r}
+data <-  read.csv("/Users/sravyabhaskara/Documents/Advanced Statistics/Homeworks/Cars_Data.csv", header=T) 
+# data <- read.csv("/Users/varunrao/Downloads/Cars_Data.csv")
+head(data)
+```
+
+# 1. Build brand maps for car brands using Cars_Data.xlsx. The client's brand name is Infinity.
+
+```{r}
+# Separate y and xs
+y <- data[, 17]  # Overall Preference (column 17)
+x <- as.matrix(data[, 2:16])  # Attributes (columns 2 to 16)
+```
+
+```{r}
+cor_mat <- cor(x)
+
+cat("cor_mat: \n")
+cor_mat
+cat("\ndimensions: \n")
+dim(cor_mat)
+```
+```{r}
+##### Principal Components Analysis #####
+
+out1 <-  eigen(cor_mat)		# eigen decomposition of correlation matrix
+va <-  out1$values			# eigenvalues
+ve <-  out1$vectors			# eigenvector
+```
+
+```{r}
+va
+```
+```{r}
+ve
+```
+```{r}
+plot(va, ylab = "Eigenvalues", xlab = "Component Nos",
+     main = "Scree Plot")
+abline(h = 1, col = "red", lty = 2)
+lines(va, col = "blue", lwd = 2)
+```
+
+```{r}
+ego <- va[va > 1]		# eigenvalues > 1
+ego
+```
+
+# 2. Determine how many factors to retain? 
+
+```{r}
+nn <- nrow(as.matrix(ego))		# number of factors to retain
+cat("Number of factors to retain", nn)
+```
+
+```{r}
+out2 <- ve[,1:nn]							# eigenvectors associated with the retained factors
+
+out3 <- ifelse(abs(out2) < 0.3, 0, out2)		# ignore small values < 0.3
+rownames(out3) <- colnames(x)
+out3
+```
+
+# 3. Assign names to the retained factors (you may need to flip the factors and then assign names)
+
+```{r}
+out3_flipped <- (-1) * out3
+out3_flipped
+```
+```{r}
+# Assign names to the factors
+# Factor 1: "Brand Appeal" (based on Attractive, Quiet, Poorly Built, Prestige, Successful)
+# Factor 2: "Luxury and Comfort" (based on Unreliable, Sporty, Easy Service)
+# Factor 3: "Economy and Value" (based on Economical, Unreliable, Poor Value)
+# Factor 4: "Innovation" (based on AvantGarde, Uncomfortable, etc.)
+```
+
+# 4. Explain iso-preference line and its difference from the regression line.
+
+```{r}
+print("The key difference between the ISO-line and Regression line is that in ISO-line, the line show a combination of theoretical variable producing the same outcomes, for example: cost or utility.")
+print("Another difference between ISO-line and regression line is the fixed slope which in ISO-line is derived from models and not data.")
+print("On the other hand Regression line which is derived from the data which depicts the best-fit relationship between the variables.")
+print("As compared to ISO-line the Regression line minimizes errors and depends on observed data patterns, commonly used for trends and forecasting. ")
+print("An iso-line example could be cars offering equal attractiveness and quietness ratings (e.g. Infinity: 5.6 and 6.3)")
+print("A regression line example could analyze how attractiveness predicts prestige ratings across brands.")
+```
+# 5. Explain what is an ideal vector and why it indicates the direction of increasing preferences.
+```{r}
+print("IDEAL VECTOR:")
+print("An ideal vector is a line that is perpendicular to iso-preference lines. It serves as the benchmark for the perfect or optimal combination of attributes.")
+
+print("The ideal vector point towards the direction of increasing preference because the as we move closer to the vector in the space, attribute values align more with the desired levels, indicating higher preference.")
+```
+
+
+```{r}
+# Add brand names and overall preference to scores
+scores <- as.matrix(x) %*% out3_flipped
+scores
+```
+
+```{r}
+out5 <- lm(y ~ scores)	
+summary(out5)
+```
+# Brand Maps
+
+```{r}
+
+scores <- as.data.frame(scores)
+
+scores$Brand <- data$Brands
+scores$OverallPreference <- y
+scores
+```
+
+
+# 6. Create the Brand map and Compute the angles of iso-preference line and ideal vector arrow.
+
+```{r}
+plot(scores$V1, scores$V2, xlab = "Factor 1 (Z1)", ylab = "Factor 2 (Z2)",
+     main = "Brand Map", col = "red", pch = 19)
+text(scores$V1, scores$V2, labels = scores$Brand, pos = 3, cex = 0.8)
+
+# Slopes of iso-preference and ideal vector
+b1 <- as.vector(coef(out5)[2])
+b2 <- as.vector(coef(out5)[3])  
+# Compute angles
+angle_iso_12 <- atan(-b1 / b2) * (180 / pi)  # Iso-preference line angle
+angle_ideal_12 <- atan(b2/b1) * (180/pi)  # Ideal vector angle
+
+angle_iso_12
+angle_ideal_12
+```
+
+```{r}
+
+plot(scores$V2, scores$V3, xlab = "Factor 2 (Z2)", ylab = "Factor 3 (Z3)",
+     main = "Brand Map", col = "red", pch = 19)
+text(scores$V2, scores$V3, labels = scores$Brand, pos = 3, cex = 0.8)
+
+# Slopes of iso-preference and ideal vector
+b2 <- as.vector(coef(out5)[3])
+b3 <- as.vector(coef(out5)[4]*(-1)) # Flipping the data 
+# Compute angles
+angle_iso_23 <- atan(-b2 / b3) * (180 / pi)  # Iso-preference line angle
+angle_ideal_23 <- atan(b3/b2) * (180/pi)  # Ideal vector angle
+
+angle_iso_23
+angle_ideal_23
+```
+
+
+```{r}
+# We have taken V1 and V3 as only these two elements are significant with lower p-value (<0.05)
+plot(scores$V1, scores$V3, xlab = "Factor 2 (Z2)", ylab = "Factor 3 (Z3)",
+     main = "Brand Map", col = "red", pch = 19)
+text(scores$V1, scores$V3, labels = scores$Brand, pos = 3, cex = 0.8)
+
+# Slopes of iso-preference and ideal vector
+b1 <- as.vector(coef(out5)[2])
+b3 <- as.vector(coef(out5)[4]*(-1)) # Flipping the data 
+# Compute angles
+angle_iso_13 <- atan(-b1 / b3) * (180 / pi)  # Iso-preference line angle
+angle_ideal_13 <- atan(b3/b1) * (180/pi)  # Ideal vector angle
+
+angle_iso_13
+angle_ideal_13
+
+
+
+```
+
+# 7. Find 95% confidence interval for the angle of the ideal vector. Use data bootstrap method we learnt in Class 2.
+```{r}
+# Bootstrap for 95% Confidence Interval using prcomp
+set.seed(123)
+N <- 1000  # Number of bootstrap samples
+angles <- numeric(N)
+
+# Calculating the values using the PCA
+for (i in 1:N) {
+  # Create bootstrap sample
+  sample <- sample(1:nrow(data), replace = TRUE)  # Sample rows with replacement
+  x_val <- x[sample, ]  # independent variables
+  y_val <- y[sample]    # dependent variable
+  
+  # Principal Component Analysis
+  PCA <- prcomp(x_val, scale. = TRUE)  # PCA with scaling
+  
+  # FOr the first two principal
+  z_val <- PCA$x[, 1:2]  
+  
+  # Regression model using the Bootstrap 
+  model <- lm(y_val~ z_val)
+  
+  # Extract coefficients for the first two components
+ c1 <- as.vector(coef(model)[2])  # Coefficient for PC1
+ c2 <- as.vector(coef(model)[3])  # Coefficient for PC2
+  
+  # slope and angle for the ideal vector
+  slope<- c2 / c1
+  angles[i] <- atan(slope) * 180 / pi
+}
+
+
+CI <- quantile(angles, probs = c(0.025, 0.975))
+cat("95% Confidence Interval for Ideal Vector Angle:", CI, "\n")
+
+```
+
+
+# 8. Recommend to Infinity's managers what they should do to improve their product design.
+```{r}
+print("Some suggestions that might help Infinity managers to improve their product design are:-")
+print("1) Identifying which attribute taht contributes most to the growth of product based on the consumer preference. For ex. if a customer prefers Attractiveness of a car, luxury setting more than other parameters then these features are highlighted in Infinity’s product design")
+print("2) Managers should consider redesigning products or improving certain features that customers value most.")
+print("3) Managers can look out for competitors if they are closer to the ideal vector, it might indicate a need for Infinity to adjust its strategy to align with consumer preferences.")
+print("These are some of the key takeaways a manager at Infinity should focus in order to imporove their product design.")
+```
+

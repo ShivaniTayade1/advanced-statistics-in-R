@@ -1,0 +1,282 @@
+---
+title: "Homework02"
+author: "Amit Gangane, Varun Rao,  Shivani Tayade,  Sravya Bhaskara,  Karishma Mehta"
+date: "2025-01-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+```{r}
+library(readxl)
+# Homework <- read_excel("/Users/varunrao/Downloads/Preferences 2025.xlsx")    
+# Homework <- read_excel("Class1b/Preferences 2025.xlsx")   
+
+Homework <- read_excel("/Users/sravyabhaskara/Documents/Advanced Statistics/Homeworks/Preferences 2025.xlsx") 
+head(Homework)
+```
+
+```{r}
+x <- as.matrix(Homework[,4:8])       # 5 x variables 
+y <- as.matrix(Homework[,3])         # Preference Rank as y variable
+n <- nrow(x)                         # number of observations
+p <- ncol(x)                         # number of variables in x data
+colnames(x) <- c("Screen Size 75", "Screen Size 85", "Resolution", "Sony", "Price")
+colnames(y) <- c("Estimates")
+```
+
+
+```{r}
+model <- lm(y ~ x)
+summary(model)
+```
+```{r}
+coefficients <- coef(model) 
+
+# Calculate utils per dollar
+price_partworth <- coefficients["xPrice"]  
+util_per_dollar <- abs(500 / price_partworth)  
+cat("Utils per dollar:", round(util_per_dollar, 2), "\n")
+
+# Calculate WTP for each attribute level
+wtp <- coefficients[c("xScreen Size 75", "xScreen Size 85", "xResolution", "xSony")] * util_per_dollar
+names(wtp) <- c("Screen Size 75", "Screen Size 85", "4K Resolution", "Sony Brand")
+
+
+wtp <- round(wtp, 2)
+cat("\nWTP for each attribute level:\n")
+print(wtp)
+
+```
+##### Approach 1: Residual Bootstrap #####
+
+
+```{r}
+# Fit the initial linear model
+out <- lm(y ~ x)
+# summary(out)
+
+# Extract values
+coefficients <- coef(out)
+price_partworth <- coefficients["xPrice"]
+util_per_dollar <- abs(500 / price_partworth)
+
+# Bootstrap setup
+yhat <- predict(out)               # Predicted values
+rr <- out$resid                    # Residuals
+bb <- 1000                         # Number of bootstrap samples
+wtp_residual <- matrix(0, bb, 4)   # Matrix to save WTP values for each attribute
+
+# Perform Residual Bootstrap
+for (ii in 1:bb) {
+  # Generate new y* based on residuals and original predictions
+  ystar <- yhat + rr[sample(length(rr), replace = TRUE)]
+  
+  # Fit the new model
+  out.star <- lm(ystar ~ x)
+  coefficients.star <- coef(out.star)
+  
+  # Calculate utils per dollar for the bootstrap sample
+  price_partworth.star <- coefficients.star["xPrice"]
+  util_per_dollar.star <- abs(500 / price_partworth.star)
+  
+  # Calculate WTP for each attribute level
+  wtp.star <- coefficients.star[c("xScreen Size 75", "xScreen Size 85", "xResolution", "xSony")] * util_per_dollar.star
+  wtp_residual[ii, ] <- wtp.star
+}
+
+colnames(wtp_residual) <- c("Screen Size 75", "Screen Size 85", "4K Resolution", "Sony Brand")
+wtp_residual.ci <- apply(wtp_residual, 2, function(x) quantile(x, probs = c(0.025, 0.50, 0.975)))
+wtp_residual.ci <- round(wtp_residual.ci, 2)
+
+print(wtp_residual.ci)
+
+```
+
+```{r}
+wtp_residual_table <- data.frame(
+  Lower = wtp_residual.ci[1, ],
+  Median = wtp_residual.ci[2, ],
+  Upper = wtp_residual.ci[3, ]
+)
+
+cat("Confidence Intervals for WTP using Residual Bootstrap (Lower, Median, Upper):\n")
+print(wtp_residual_table)
+```
+
+
+```{r}
+# Plot histograms for each attribute's WTP
+par(mfrow = c(2, 2))
+
+hist(wtp_residual[, 1], 
+     main = "Histogram of WTP: Screen Size 75", 
+     xlab = "WTP (Screen Size 75)", 
+     col = "lightblue", 
+     border = "black", 
+     breaks = 20)
+
+hist(wtp_residual[, 2], 
+     main = "Histogram of WTP: Screen Size 85", 
+     xlab = "WTP (Screen Size 85)", 
+     col = "lightgreen", 
+     border = "black", 
+     breaks = 20)
+
+hist(wtp_residual[, 3], 
+     main = "Histogram of WTP: 4K Resolution", 
+     xlab = "WTP (4K Resolution)", 
+     col = "lightcoral", 
+     border = "black", 
+     breaks = 20)
+
+hist(wtp_residual[, 4], 
+     main = "Histogram of WTP: Sony Brand", 
+     xlab = "WTP (Sony Brand)", 
+     col = "lightgoldenrod", 
+     border = "black", 
+     breaks = 20)
+
+par(mfrow = c(1, 1))
+
+```
+
+##### Approach 2: Data Bootstrap #####
+
+```{r}
+# Initialize output matrix for WTP
+wtp_data <- matrix(0, bb, 4)  
+
+# Perform Data Bootstrap
+for(ii in 1:bb) {
+  
+ 
+  yx_matrix <- cbind(y, x)
+  data.star <- yx_matrix[sample(n, n, replace = TRUE), ]
+  ystar <- data.star[, 1]
+  xstar <- data.star[, -1]  
+  
+  # Fit the linear model with new y* and x*
+  out.star <- lm(ystar ~ xstar)
+  coefficients.star <- coef(out.star)
+  
+  # Calculate utils per dollar for the bootstrap sample
+  price_partworth_star <- coefficients.star["xstarPrice"]
+  util_per_dollar_star <- abs(500 / price_partworth_star)
+  
+  # Calculate WTP for each attribute level
+  wtp_star <- coefficients.star[c("xstarScreen Size 75", "xstarScreen Size 85", "xstarResolution", "xstarSony")] * util_per_dollar_star
+  wtp_data[ii, ] <- wtp_star
+}
+
+
+colnames(wtp_data) <- c("Screen Size 75", "Screen Size 85", "4K Resolution", "Sony Brand")
+wtp_data.ci <- apply(wtp_data, 2, function(x) quantile(x, probs = c(0.025, 0.50, 0.975)))
+wtp_data.ci <- round(wtp_data.ci, 2)
+print(wtp_data.ci)
+
+```
+
+```{r}
+wtp_data_table <- data.frame(
+  Lower = wtp_data.ci[1, ],
+  Median = wtp_data.ci[2, ],
+  Upper = wtp_data.ci[3, ]
+)
+
+cat("Confidence Intervals for WTP using Data Bootstrap (Lower, Median, Upper):\n")
+print(wtp_data_table)
+```
+
+```{r}
+par(mfrow = c(2, 2)) 
+
+hist(wtp_data[, 1], main = "Histogram: Screen Size 75", xlab = "WTP", col = "lightblue", breaks = 20)
+hist(wtp_data[, 2], main = "Histogram: Screen Size 85", xlab = "WTP", col = "lightgreen", breaks = 20)
+hist(wtp_data[, 3], main = "Histogram: 4K Resolution", xlab = "WTP", col = "lightcoral", breaks = 20)
+hist(wtp_data[, 4], main = "Histogram: Sony Brand", xlab = "WTP", col = "lightgoldenrod", breaks = 20)
+
+par(mfrow = c(1, 1))
+
+```
+
+##### Approach 3: Monte Carlo Simulation #####
+
+```{r}
+
+library("MASS")
+bhat <- as.matrix(coefficients, length(coefficients), 1) # Coefficients from original model
+sigma <- vcov(out)                                       # Variance-covariance matrix of bhat
+
+# Number of simulations
+bb <- 1000
+
+# Take bb draws from the multivariate Normal distribution
+bhat.star <- mvrnorm(bb, bhat, sigma)  
+
+# Initialize a matrix to store WTP values for each draw
+wtp_monte_carlo <- matrix(0, bb, 4)
+
+# Compute WTP for each realization of bhat.star
+for (ii in 1:bb) {
+  # Extract price partworth for the current realization
+  price_partworth.star <- bhat.star[ii, "xPrice"]
+  util_per_dollar.star <- abs(500 / price_partworth.star)
+  
+  # Calculate WTP for each attribute level
+  wtp.star <- bhat.star[ii, c("xScreen Size 75", "xScreen Size 85", "xResolution", "xSony")] * util_per_dollar.star
+  wtp_monte_carlo[ii, ] <- wtp.star
+}
+
+
+colnames(wtp_monte_carlo) <- c("Screen Size 75", "Screen Size 85", "4K Resolution", "Sony Brand")
+wtp_monte_carlo.ci <- apply(wtp_monte_carlo, 2, function(x) quantile(x, probs = c(0.025, 0.50, 0.975)))
+wtp_monte_carlo.ci <- round(wtp_monte_carlo.ci, 2)
+
+print(wtp_monte_carlo.ci)
+
+```
+
+```{r}
+wtp_monte_carlo_table <- data.frame(
+  Lower = wtp_monte_carlo.ci[1, ],
+  Median = wtp_monte_carlo.ci[2, ],
+  Upper = wtp_monte_carlo.ci[3, ]
+)
+
+cat("Confidence Intervals for WTP using Monte Carlo Bootstrap (Lower, Median, Upper):\n")
+print(wtp_monte_carlo_table)
+```
+
+
+```{r}
+par(mfrow = c(2, 2)) 
+
+hist(wtp_monte_carlo[, 1], main = "Histogram: Screen Size 75", xlab = "WTP", col = "lightblue", breaks = 20)
+hist(wtp_monte_carlo[, 2], main = "Histogram: Screen Size 85", xlab = "WTP", col = "lightgreen", breaks = 20)
+hist(wtp_monte_carlo[, 3], main = "Histogram: 4K Resolution", xlab = "WTP", col = "lightcoral", breaks = 20)
+hist(wtp_monte_carlo[, 4], main = "Histogram: Sony Brand", xlab = "WTP", col = "lightgoldenrod", breaks = 20)
+
+par(mfrow = c(1, 1))
+```
+##### Summary table for 3 approaches #####
+
+```{r}
+wtp_summary_df <- data.frame(
+  Attribute = colnames(wtp_residual.ci),
+  Residual_Bootstrap = paste0("(", wtp_residual.ci[1, ], ", ", wtp_residual.ci[2, ], ", ", wtp_residual.ci[3, ], ")"),
+  Data_Bootstrap = paste0("(", wtp_data.ci[1, ], ", ", wtp_data.ci[2, ], ", ", wtp_data.ci[3, ], ")"),
+  Monte_Carlo = paste0("(", wtp_monte_carlo.ci[1, ], ", ", wtp_monte_carlo.ci[2, ], ", ", wtp_monte_carlo.ci[3, ], ")")
+)
+
+cat("Summary of WTP Confidence Intervals from Three Approaches:\n")
+print(wtp_summary_df)
+
+```
+
+
+
+

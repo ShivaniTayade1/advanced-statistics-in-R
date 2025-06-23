@@ -1,0 +1,140 @@
+---
+title: "HW7"
+author: "Sravya Bhaskara"
+date: "2025-03-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+data <- read.csv("data_week.csv", sep = ",", dec=".", header = T) 	# weekly data
+names(data)
+head(data,5)
+```
+
+# 1. Select one of the weather time series from data_week.csv
+
+
+```{r}
+# Considering avg_rainfall_level
+
+rain <- data[,13]  
+rain
+
+```
+```{r}
+# Convert to time series object
+rain.observed <- ts(rain, frequency = 52, start = c(2015,1))
+```
+
+
+```{r}
+# Plot the original time series
+plot.ts(rain.observed, main = "Observed Rain Fall Time Series", col = "blue")
+```
+
+# 2. Try the four combinations of beta (on/off) and gamma (on/off)
+
+```{r}
+# Model 1: No trend, no seasonality
+hw_alpha <- HoltWinters(rain.observed, beta = FALSE, gamma = FALSE)
+
+# Model 2: Trend but no seasonality
+hw_alpha_beta <- HoltWinters(rain.observed, beta = TRUE, gamma = FALSE)
+
+# Model 3: Seasonality but no trend
+hw_alpha_gamma <- HoltWinters(rain.observed, beta = FALSE, gamma = TRUE)
+
+# Model 4: Both trend and seasonality
+hw_alpha_beta_gamma <- HoltWinters(rain.observed, beta = TRUE, gamma = TRUE)
+
+```
+
+# 3. Present the plots of data series, trend, and seasonal components for each of the four combinations
+
+```{r}
+# Model 1: No Trend, No Seasonality (Alpha Only)
+plot(hw_alpha)
+```
+
+
+```{r}
+# Model 2: Trend but No Seasonality (Alpha + Beta)
+plot(hw_alpha_beta)
+```
+```{r}
+# Model 3: Seasonality but No Trend (Alpha + Gamma)
+plot(hw_alpha_gamma)
+```
+
+
+```{r}
+# Model 4: Both Trend and Seasonality (Alpha + Beta + Gamma)
+plot(hw_alpha_beta_gamma)
+```
+
+# 4. Make out-of-sample forecast for 26 weeks with confidence bands. 
+
+```{r}
+# Forecast for 26 weeks with 68% and 95% confidence intervals
+fcast1 <- forecast:::forecast.HoltWinters(hw_alpha, h = 26, level = c(68, 95))
+fcast2 <- forecast:::forecast.HoltWinters(hw_alpha_beta, h = 26, level = c(68, 95))
+fcast3 <- forecast:::forecast.HoltWinters(hw_alpha_gamma, h = 26, level = c(68, 95))
+fcast4 <- forecast:::forecast.HoltWinters(hw_alpha_beta_gamma, h = 26, level = c(68, 95))
+
+# Plot forecasts separately
+par(mfrow = c(1,1))  # 2x2 grid
+plot(fcast1, main = "Forecast - Alpha Only")
+plot(fcast2, main = "Forecast - Alpha + Beta")
+plot(fcast3, main = "Forecast - Alpha + Gamma")
+plot(fcast4, main = "Forecast - Alpha + Beta + Gamma")
+
+```
+
+# 5. Recommend one forecasting model -- give your justification (Hint: use AIC and BIC)
+
+```{r}
+# Function to calculate AIC and BIC for Holt-Winters models
+compute_AIC_BIC <- function(model) {
+  n <- length(model$x)  # Number of observations
+  k <- sum(!is.null(model$alpha), !is.null(model$beta), !is.null(model$gamma)) + 1  # Number of parameters
+  SSE <- model$SSE  # Sum of Squared Errors
+  sigma2 <- SSE / n  # Estimate of error variance
+  
+  # Log-likelihood (assuming normal errors)
+  logL <- -0.5 * n * (log(2 * pi * sigma2) + 1)
+  
+  # Compute AIC and BIC
+  AIC_value <- 2 * k - 2 * logL
+  BIC_value <- log(n) * k - 2 * logL
+  
+  return(c(AIC = AIC_value, BIC = BIC_value))
+}
+
+# Apply function to each model
+AIC_BIC_values <- data.frame(
+  Model = c("Alpha Only", "Alpha + Beta", "Alpha + Gamma", "Alpha + Beta + Gamma"),
+  t(sapply(list(hw_alpha, hw_alpha_beta, hw_alpha_gamma, hw_alpha_beta_gamma), compute_AIC_BIC))
+)
+
+# Print model comparison table
+print(AIC_BIC_values)
+
+# Choose the best model based on lowest AIC
+best_model <- AIC_BIC_values[which.min(AIC_BIC_values$AIC), ]
+print(paste("Recommended Model:", best_model$Model))
+
+
+```
+
+
+
+
+
+
+
+`
+

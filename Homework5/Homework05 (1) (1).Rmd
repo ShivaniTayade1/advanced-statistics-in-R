@@ -1,0 +1,76 @@
+---
+title: "Homework05"
+author: "Varun Rao"
+date: "2025-02-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load Data
+data3 <- read.csv("/Users/varunrao/Downloads/data_tri_logistic.csv", header = TRUE)
+
+# Extract Variables
+week3 <- data3$week
+sales3 <- data3$noisy.sales
+
+# Training & Test Data Split
+train_data <- subset(data3, week <= 140)
+test_data <- subset(data3, week > 140)
+
+# Fit Tri-Logistic Model
+m3 <- nls(noisy.sales ~ b1/(1 + exp(-log(81)*(week - b3)/b2)) + 
+                    b4/(1 + exp(-log(81)*(week - b6)/b5)) + 
+                    b7/(1 + exp(-log(81)*(week - b9)/b8)), 
+          start = list(b1 = 100, b2 = 23, b3 = 26, 
+                       b4 = 217, b5 = 17, b6 = 79, 
+                       b7 = 600, b8 = 20, b9 = 130), 
+          data = train_data,
+          control = nls.control(maxiter = 1000)
+)
+
+# Summary & Confidence Intervals
+summary(m3)
+CI.m3 <- confint(m3, level = 0.95)
+print(CI.m3)
+
+# Predictions for Training & Test Data
+train_data$predicted <- predict(m3, newdata = train_data)
+test_data$predicted <- predict(m3, newdata = test_data)
+print(test_data$predicted )
+
+
+# Monte Carlo Simulation for Prediction Intervals
+set.seed(123)  # For reproducibility
+num_sim <- 1000
+simulated_preds <- replicate(num_sim, {
+  coef_sim <- MASS::mvrnorm(1, coef(m3), vcov(m3))  # Simulated coefficients
+  test_pred_sim <- coef_sim[1] / (1 + exp(-log(81) * (test_data$week - coef_sim[3]) / coef_sim[2])) + 
+                   coef_sim[4] / (1 + exp(-log(81) * (test_data$week - coef_sim[6]) / coef_sim[5])) + 
+                   coef_sim[7] / (1 + exp(-log(81) * (test_data$week - coef_sim[9]) / coef_sim[8]))
+  return(test_pred_sim)
+})
+
+# Compute 95% Confidence Intervals for Predictions
+test_data$lower_CI <- apply(simulated_preds, 1, quantile, probs = 0.025)
+test_data$upper_CI <- apply(simulated_preds, 1, quantile, probs = 0.975)
+
+cbind(test_data$lower_CI, test_data$upper_C)
+
+# Check Percentage of Actual Values Within Prediction Interval
+test_data$within_CI <- (test_data$noisy.sales >= test_data$lower_CI) & (test_data$noisy.sales <= test_data$upper_CI)
+coverage_percentage <- mean(test_data$within_CI) * 100
+print(paste("Percentage of actual values within prediction intervals:", round(coverage_percentage, 2), "%"))
+
+
+# Plot Actual vs Predicted Sales
+plot(week3, sales3, main = "Actual vs. Predicted Sales", xlab = "Week", ylab = "Sales")
+lines(train_data$week, train_data$predicted, col = "blue", lwd = 2, lty = 2)
+lines(test_data$week, test_data$predicted, col = "red", lwd = 2, lty = 2)
+
+
+```
+

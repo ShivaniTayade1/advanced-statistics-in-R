@@ -1,0 +1,220 @@
+---
+title: "Home Work 6"
+output: html_document
+date: "2025-03-03"
+---
+
+```{r}
+## read data
+library(flexmix)
+data <- read.csv("C://Users//Amit//Downloads//smartphone_customer.csv", header = T)    # read csv file and label the data as "data"
+names(data)
+
+xx <- data[,-c(13,14,17,19)]
+price <- data[,19]
+
+nn <- nrow(xx)
+np <- ncol(xx) 
+names(xx)
+```
+
+
+```{r}
+mix_reg.out <- flexmix(log(price) ~ male.eq.1 + log(height) + log(handsize)
+									+ log(age) + log(1 + gaming) + log(1 + chat) + log(1 + maps)
+									+ log(1 + video) + log(1 + social) + log(1 + reading)
+									+ log(1+ days_ago) + Apple + Samsung + log(screen_size),
+									data = xx, k = 2)
+
+print(mix_reg.out)
+
+summary(mix_reg.out)
+
+# parameter estimates in each segment without SEs and t-vals
+parameters(mix_reg.out, component = 1) 
+parameters(mix_reg.out, component = 2) 
+parameters(mix_reg.out) # both clusters
+```
+
+
+```{r}
+# parameter estimates in each segment with SEs and t-vals
+
+estimates.out <- refit(mix_reg.out)
+summary(estimates.out)
+
+many.mix_reg.out <- stepFlexmix(log(price) ~ male.eq.1 + log(height) + log(handsize)
+									+ log(age) + log(1 + gaming) + log(1 + chat) + log(1 + maps)
+									+ log(1 + video) + log(1 + social) + log(1 + reading)
+									+ log(1+ days_ago) + Apple + Samsung + log(screen_size),
+									data = xx, k = 2:10, nrep = 10, control = list(iter.max = 1000))
+ 
+(many.mix_reg.out)
+
+
+# K = 2
+mix_reg.two <- flexmix(log(price) ~ male.eq.1 + log(height) + log(handsize)
+									+ log(age) + log(1 + gaming) + log(1 + chat) + log(1 + maps)
+									+ log(1 + video) + log(1 + social) + log(1 + reading)
+									+ log(1+ days_ago) + Apple + Samsung + log(screen_size),
+									data = xx, k = 2)
+bic2 <- BIC(mix_reg.two)
+nobs2 <- mix_reg.two@size 
+mrc2 <- bic2 - 2 * (nobs2[1] * log(nobs2[1]/nn) + nobs2[2] * log(nobs2[2]/nn))
+
+
+
+# K = 3
+mix_reg.three <- flexmix(log(price) ~ male.eq.1 + log(height) + log(handsize)
+									+ log(age) + log(1 + gaming) + log(1 + chat) + log(1 + maps)
+									+ log(1 + video) + log(1 + social) + log(1 + reading)
+									+ log(1+ days_ago) + Apple + Samsung + log(screen_size),
+									data = xx, k = 3)
+bic3 <- BIC(mix_reg.three)
+nobs3 <- mix_reg.three@size 
+mrc3 <- bic3 - 2 * (nobs3[1] * log(nobs3[1]/nn) +  nobs3[2] * log(nobs3[2]/nn) + nobs3[3] * log(nobs3[3]/nn))
+
+
+
+# K = 4
+
+mix_reg.four <- flexmix(log(price) ~ male.eq.1 + log(height) + log(handsize)
+									+ log(age) + log(1 + gaming) + log(1 + chat) + log(1 + maps)
+									+ log(1 + video) + log(1 + social) + log(1 + reading)
+									+ log(1+ days_ago) + Apple + Samsung + log(screen_size),
+									data = xx, k = 4)
+bic4 <- BIC(mix_reg.four)
+nobs4 <- mix_reg.four@size 
+mrc4 <- bic4 - 2 * (nobs4[1] * log(nobs4[1]/nn) + nobs4[2] * log(nobs4[2]/nn) + nobs4[3] * log(nobs4[3]/nn) + nobs4[4] * log(nobs4[4]/nn) )
+
+
+mrc <- rbind(mrc2, mrc3, mrc4)
+plot(mrc, type = "l", xlab = "Clusters", ylab = "Modified MRC", main = "Number of Segments to Retain")
+```
+
+
+```{r}
+# parameter estimates in each segment without SEs and t-vals
+cbind(
+  parameters(mix_reg.three, component = 1),
+  parameters(mix_reg.three, component = 2),
+  parameters(mix_reg.three, component = 3)
+)
+
+```
+```{r}
+# Load necessary libraries
+library(factoextra)
+library(NbClust)
+library(cluster)
+library(ggplot2) 
+
+# Read the dataset
+data <- read.csv("C://Users//Amit//Downloads//smartphone_customer.csv", header = TRUE)  
+colnames(data)  # Display column names
+
+# Data Preprocessing
+processed_data <- data[, -c(13, 14, 17, 19)]  
+price_values <- data[, 19]  
+
+scaled_data <- scale(processed_data)
+```
+
+
+```{r}
+# Determine Optimal k for K-Means using Scree Plot
+fviz_nbclust(scaled_data, kmeans, method = "wss") + 
+  labs(title = "Scree Plot for K-Means",
+       x = "Number of Clusters (k)",
+       y = "Within-Cluster Sum of Squares") +
+  theme_minimal()
+
+# Function to Perform K-Means Clustering & Regression
+perform_kmeans_regression <- function(data, price, num_clusters) {
+  
+  # Standardize the dataset
+  standardized_data <- scale(data)
+  
+  # Apply K-Means clustering
+  kmeans_model <- kmeans(standardized_data, centers = num_clusters, nstart = 10, iter.max = 50)
+  cluster_labels <- kmeans_model$cluster  
+  
+  # Combine cluster membership with dataset
+  merged_data <- cbind(cluster_labels, cbind(price, data))
+  
+  total_samples <- nrow(standardized_data)
+  total_residuals <- 0
+  clustering_penalty <- 0
+  
+  models_list <- list()  # Store regression models for each cluster
+  
+  for (cluster_id in 1:num_clusters) {
+    
+    # Extract subset of data belonging to the current cluster
+    subset_data <- merged_data[cluster_labels == cluster_id,]
+    
+    # Fit a regression model within the cluster
+    regression_model <- lm(log(price) ~ male.eq.1 + log(height) + log(handsize)
+                           + log(age) + log(1 + gaming) + log(1 + chat) + log(1 + maps)
+                           + log(1 + video) + log(1 + social) + log(1 + reading)
+                           + log(1 + days_ago) + Apple + Samsung + log(screen_size),
+                           data = subset_data)
+    
+    num_observations <- nobs(regression_model)
+    residuals <- regression_model$residuals
+    
+    total_residuals <- total_residuals + sum(residuals^2)
+    clustering_penalty <- clustering_penalty + num_observations * log(num_observations / total_samples)
+    
+    models_list[[cluster_id]] <- regression_model
+  }
+  
+  # Compute Model Selection Criteria
+  num_parameters <- 14  # Number of regression coefficients
+  actual_aic <- total_samples * log(total_residuals / total_samples) + 2 * num_parameters
+  modified_aic <- actual_aic - 2 * clustering_penalty
+  
+  return(list(models_list, actual_aic, modified_aic))
+}
+```
+
+
+```{r}
+# Run K-Means Regression for k = 1 to 10
+kmeans_models <- list()
+for (k in 1:10) {
+  kmeans_models[[k]] <- perform_kmeans_regression(processed_data, price_values, k)
+}
+
+# Store AIC Values for Each k
+modified_aic_values <- numeric(10)
+actual_aic_values <- numeric(10)
+
+for (k in 1:10) {
+  modified_aic_values[k] <- kmeans_models[[k]][[3]]
+  actual_aic_values[k] <- kmeans_models[[k]][[2]]
+}
+
+# Create Data Frame for Plotting
+aic_df <- data.frame(k = 1:10, Modified_AIC = modified_aic_values, Actual_AIC = actual_aic_values)
+
+# Plot Modified AIC
+ggplot(aic_df, aes(x = k)) +
+  geom_line(aes(y = Modified_AIC), color = "blue", size = 1) +
+  geom_point(aes(y = Modified_AIC), color = "blue", size = 2) +
+  labs(title = "Modified AIC vs Number of Clusters",
+       x = "Number of Clusters (k)",
+       y = "Modified AIC") +
+  theme_minimal()
+
+# Plot Actual AIC
+ggplot(aic_df, aes(x = k)) +
+  geom_line(aes(y = Actual_AIC), color = "darkgreen", size = 1) +
+  geom_point(aes(y = Actual_AIC), color = "darkgreen", size = 2) +
+  labs(title = "Actual AIC vs Number of Clusters",
+       x = "Number of Clusters (k)",
+       y = "Actual AIC") +
+  theme_minimal()
+
+```
+
